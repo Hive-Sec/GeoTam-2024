@@ -1,0 +1,19 @@
+OpenLocal: Business-rate data [Available soon]
+ 
+ AllThePlaces: These are scraped locations of various chain businesses (of all sorts, including a lot of retail businesses), with geospatial location and some metadata. https://www.alltheplaces.xyz/
+ 
+ AutomatticKnowledge Resources: These include processed open Ordnance Survey data including buildings, roads, railways, etc., plus deprivation data, other building footprints, etc. https://automaticknowledge.co.uk/resources/
+ 
+ Companies House: This is the company registration body in the UK, providing data dumps at available at: https://download.companieshouse.gov.uk/en_output.html. Other data products are listed at https://www.gov.uk/guidance/companies-house-data-products.
+ 
+ Office for National Statistics: This is the government statistical body that runs censuses and provides a huge range of geospatial data including information on wealth and economic health of areas. Available at: https://www.ons.gov.uk/
+ 
+ Free Company Dataset: A list of companies, derived from LinkedIn, with useful metadata. Available at: https://docs.peopledatalabs.com/docs/free-company-dataset. Older versions of the dataset are available under the ‘7 million company dataset’ which can be accessed here
+
+https://www.kaggle.com/datasets/peopledatalabssf/free-7-million-company-dataset
+ 
+ OpenStreetMap: freely-available geospatial data, including points of interest like businesses https://www.openstreetmap.org/. The easiest place to download data in bulk is https://download.geofabrik.de/europe/united-kingdom.html, or by using the Overpass API to run queries at https://overpass-turbo.eu/
+ 
+ Mapping GM: GMODIN - An open map of relevant public and private infrastructure data. This resource is perhaps tangential, but could be useful nonetheless. Available at: https://mappinggm.org.uk/
+ 
+ Linking Business Names Across Datasets: Linking business names across datasets - https://www.dbreunig.com/2024/09/27/conflating-overture-points-of-interests-with-duckdb-ollama-and-more.html - some interesting approaches to linking datasets where the business names are slightly different in each dataset (eg. J SAINSBURY LTD and SAINSBURY’S SUPERMARKETS)
