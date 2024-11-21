@@ -1,0 +1,88 @@
+Embeddings
+
+Also at the Small Data conference was Ollama, a framework for easily running LLMs on your local machine. We’re going to use it today to generate embeddings for our venues. To follow along, you’ll need to:
+
+    Download and install Ollama
+    Run ollama pull mxbai-embed-large in your terminal to download the model we’ll be using
+    Install the Ollama python library with: pip install ollama.
+    Finally, run ollama serve in your terminal to start the server.
+
+The Python code we’ll write will hit the running Ollama instance and get our results.
+
+Vicki Boykis wrote my favorite embedding explanation, but it’s a bit long for the moment. What we need to know here is that [embeddings measure how contextually similar things are to each other][embededings], based on all the input data used to create the model generating the embedding. We’re using the mxbai-embed-large model here to generate embedding vectors for our places, which are large arrays of numbers that we can compare.
+
+To embed our places we need to format each of them as single strings. We’ll concatenate their names and address information, then feed this “description” string into Ollama.
+import ollama
+
+def get_embedding(text):
+    return ollama.embeddings(
+        model='mxbai-embed-large', 
+        prompt=text
+    )['embedding']
+
+inspections_df = con.sql("""
+SELECT Facility_ID as fid, concat(Facility_Name, ',', Address, ',', City, ',', Zip) as description FROM inspections GROUP BY description, fid
+""").df()
+places_df = con.sql("""
+SELECT id as gers, concat(Facility_Name, ',', Address, ',', City, ',', Zip) as description FROM places GROUP BY description, gers
+""").df()
+
+# Compute the embeddings
+inspection_string_df['embedding'] = inspection_string_df['description'].apply(lambda x: get_embedding(x))
+places_df['embedding'] = places_string_df['description'].apply(lambda x: get_embedding(x))
+
+We could store the generated embeddings in our DuckDB database (DuckDB has a vector similarity search extension, btw), but for this demo we’re going to stay in Python, using in-memory dataframes.
+
+The code here is simple enough. We create our description strings as a column in DuckDB then generate embedding values using our get_embedding function, which calls out to Ollama.
+
+But this code is slow. On my 64GB MacStudio, calculating embeddings for ~3,000 inspection strings takes over a minute. This performance remains consistent when we throw ~56,000 places strings at Ollama – taking just shy of 20 minutes. Our most complicated DuckDB query above took only 0.4 seconds.
+
+(An optimized conflation pipeline would only compute the Overture place strings during comparison if they didn’t already exist – saving us some time. But 20 minutes isn’t unpalpable for this demo. You can always optimize later…)
+
+Comparing embeddings is much faster, taking only a few minutes (and this could be faster in DuckDB, but we’ll skip that since a feature we’d need here is not production-ready). Without using DuckDB VSS, we’ll need to load a few libraries. But that’s easy enough:
+from sentence_transformers.util import cos_sim
+import numpy as np
+import pandas as pd
+
+def generate_search_embedding(text):
+    return ollama.embeddings(
+        model='mxbai-embed-large', 
+        prompt=text
+    )['embedding']
+
+results_df = pd.DataFrame(columns=['i_description', 'p_description', 'fid', 'gers', 'h3', 'similarity_score'])
+for index, row in inspection_string_df.iterrows():
+    # Generate the candidate embeddings
+    candidate_places = places_string_df[places_string_df['h3'] == row['h3']]
+
+    sims = cos_sim(row['embedding'], candidate_places['embedding'].tolist())
+    
+    # Find the highest ranking score and the associated row
+    max_sim_index = sims.argmax().item()
+    max_sim_score = sims[0][max_sim_index].item()
+    highest_ranking_row = candidate_places.iloc[max_sim_index]
+
+    # Print the results
+    # Add results to the new DataFrame
+    new_row = pd.DataFrame({
+        'i_description': row['description'],
+        'p_description': highest_ranking_row['description'],
+        'fid': row['fid'],
+        'gers': highest_ranking_row['gers'],
+        'h3': row['h3'],
+        'similarity_score': max_sim_score
+    }, index=[index])
+    results_df = pd.concat([results_df, new_row], ignore_index=True)
+
+results_df
+I ran this all on a local machine. The staging, exploration, and conflation were done with DuckDB, 
+Ollama, H3, Rowboat3, Kepler (for visualization), and some Python. 
+Aside from H3 and generating our bounding box for downloading our Overture subset, 
+we didn’t touch any geospatial functions, reducing our complexity significantly.
+
+WE need to explore this deeper !!!!
+
+
+
+
+
