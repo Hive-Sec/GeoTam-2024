@@ -1,72 +1,56 @@
-import tkinter as tk
-from tkinter import filedialog
-import tkintermapview # type: ignore
+#First Mission, getting the data and staging it where we can work on it.
+import duckdb
 
-def animate_text(text, label, index=0):
-    if index < len(text):
-        label.config(text=label.cget("text") + text[index])
-        root.after(100, animate_text, text, label, index + 1)
+# Create the database we'll save our work to and load the extensions we'll need
+con = duckdb.connect("conflation_demonstration.ddb")
+con.sql("install spatial")
+con.sql("install httpfs")
+con.sql("load spatial")
+con.sql("load httpfs")
 
-def show_main_window():
-    root.destroy()
-    main_window = tk.Tk()
-    main_window.title("Main Application")
-    main_window.geometry("800x600")
-    main_window.configure(bg="black")
+# Load the CSV from the BSD Rebalance earth DataSet
+con.sql("CREATE TABLE inspections AS SELECT * FROM read_csv('/home/whoami/running-hive-projects/GEOTAM/DataSets/BSD-big.csv', ignore_errors=True)")
+# We need to get this CSV into a form where we can interrogate it and compare it to other datasets. For that, we’re going to use DuckDB. 
+# Let’s set up our database and load our inspections into a table:
+# Download the Overture Places data. 
+# 1. Create a bounding box around all the Manchester records
+# 2. Get all the places from Overture in that bounding box, with a confidence score > 0.5
+# 3. Finally transform these results into a format that matches manchester Data
 
-    # Create menu
-    menubar = tk.Menu(main_window)
-    main_window.config(menu=menubar)
+con.sql("""
+    CREATE TABLE IF NOT EXISTS places AS 
+    WITH bounding_box AS (
+        SELECT max(Latitude) as max_lat, min(Latitude) as min_lat, max(Longitude) as max_lon, min(Longitude) as min_lon
+        FROM inspections
+    )
+    SELECT 
+        id, 
+        upper(names['primary']) as Facility_Name, 
+        upper(addresses[1]['freeform']) as Address, 
+        upper(addresses[1]['locality']) as City, 
+        upper(addresses[1]['region']) as State, 
+        left(addresses[1]['postcode'], 5) as Zip, 
+        geometry, 
+        ST_X(geometry) as Longitude,
+        ST_Y(geometry) as Latitude,
+        categories 
+    FROM (
+        SELECT * 
+        FROM read_parquet('s3://overturemapsNOT_RECORDED IN CSV/release/2024-09-18.0/theme=places/type=place/*', filename=true, hive_partitioning=1),
+             bounding_box
+        WHERE addresses[1] IS NOT NULL AND
+            bbox.xmin BETWEEN bounding_box.min_lon AND bounding_box.max_lon AND
+            bbox.ymin BETWEEN bounding_box.min_lat AND bounding_box.max_lat AND
+            confidence > 0.5
+    );
+""")
 
-    # File menu
-    file_menu = tk.Menu(menubar, tearoff=0, bg="black", fg="#39FF14")
-    menubar.add_cascade(label="File", menu=file_menu)
-    file_menu.add_command(label="Upload File", command=lambda: upload_file(main_window))
+con.sql("INSTALL h3 FROM community")
+con.sql("LOAD h3")
 
-    # Create a frame to hold the map
-    map_frame = tk.Frame(main_window, bg="black")
-    map_frame.pack(pady=20, padx=20, fill="both", expand=True)
+# Add H3 indexs to each table
+con.sql("ALTER TABLE places ADD COLUMN IF NOT EXISTS h3 uint64")
+con.sql("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS h3 uint64")
+con.sql("UPDATE places SET h3 = h3_latlng_to_cell(Latitude, Longitude, 7)")
+con.sql("UPDATE inspections SET h3 = h3_latlng_to_cell(Latitude, Longitude, 7)")
 
-    # Create the map widget
-    map_widget = tkintermapview.TkinterMapView(map_frame, width=700, height=500, corner_radius=0)
-    map_widget.pack()
-
-    # Set the position to Manchester, UK
-    map_widget.set_position(53.4808, -2.2426)  # Latitude and Longitude of Manchester
-    map_widget.set_zoom(12)  # Adjust the zoom level as needed
-
-    main_window.mainloop()
-
-def upload_file(window):
-    file_path = filedialog.askopenfilename(filetypes=[("All Files", "*.*")])
-    if file_path:
-        tk.messagebox.showinfo("File Uploaded", f"File uploaded: {file_path}", parent=window)
-
-# Create the welcome window
-root = tk.Tk()
-root.title("Welcome")
-root.geometry("400x200")
-root.configure(bg="black")
-
-# Create a label for the animated text
-animated_label = tk.Label(root, text="", font=("Arial", 20, "bold"), fg="#39FF14", bg="black")
-animated_label.pack(expand=True)
-
-# Create and pack a frame to hold the buttons
-frame = tk.Frame(root, bg="black")
-frame.pack(expand=True)
-
-# Create OK button
-ok_button = tk.Button(frame, text="OK", command=show_main_window, width=10, fg="#39FF14", bg="black")
-ok_button.pack(side=tk.LEFT, padx=10)
-
-# Create Cancel button
-cancel_button = tk.Button(frame, text="Cancel", command=root.quit, width=10, fg="#39FF14", bg="black")
-cancel_button.pack(side=tk.LEFT, padx=10)
-
-# Start the text animation
-welcome_text = "Welcome to the Application!"
-root.after(100, animate_text, welcome_text, animated_label)
-
-# Start the main event loop
-root.mainloop()
