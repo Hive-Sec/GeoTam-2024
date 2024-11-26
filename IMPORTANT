@@ -1,4 +1,5 @@
-Embeddings
+
+WE need to explore this deeper !!!! Embeddings
 
 Also at the Small Data conference was Ollama, a framework for easily running LLMs on your local machine. We’re going to use it today to generate embeddings for our venues. To follow along, you’ll need to:
 
@@ -80,7 +81,6 @@ Ollama, H3, Rowboat3, Kepler (for visualization), and some Python.
 Aside from H3 and generating our bounding box for downloading our Overture subset, 
 we didn’t touch any geospatial functions, reducing our complexity significantly.
 
-WE need to explore this deeper !!!!
 
 
 
